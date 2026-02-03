@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+.eggs
+*.egg-info
+*.egg
+
+# Node
+node_modules
+npm-debug.log
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build
+dist
+build
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data（開發數據）
+data/
+!data/.gitkeep
+
+# Tests
+tests/
+*.test.py
+coverage/
+
+# Docs（可選）
+# docs/
+
+# Docker（避免遞迴）
+docker-compose*.yml
+Dockerfile*
