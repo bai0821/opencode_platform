@@ -486,10 +486,15 @@ class AnalystAgent(BaseAgent):
 4. 用程式碼進行統計計算
 
 你可以使用以下工具：
-- rag_search: 搜尋相關資料
+- rag_search: 搜尋相關資料（PDF 文件必須用此工具查詢）
 - rag_multi_search: 多角度搜尋
 - code_execute: 執行數據分析程式碼（pandas, numpy 等）
-- file_read: 讀取數據文件
+- file_read: 讀取數據文件（僅限 CSV、Excel、JSON 等結構化資料）
+
+## 強制規則
+- **禁止對 PDF 檔案使用 file_read**。PDF 內容已經被索引到知識庫，請透過 rag_search 工具查詢。直接讀取 PDF 原始檔案會得到亂碼，無法分析。
+- 當使用者選擇了 PDF 文件，必須使用 rag_search 並設置 file_filter 參數來搜尋。
+- file_read 只能用於讀取 CSV、Excel、JSON、TXT 等可直接解析的結構化資料檔案。
 
 請用數據說話，提供具體的分析結果和可視化。
 """
