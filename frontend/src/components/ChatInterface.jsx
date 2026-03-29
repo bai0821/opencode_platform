@@ -1008,7 +1008,11 @@ function ChatInterface({ documents = [], selectedDocs: initialSelectedDocs = [],
                   summary: data.content || 'Unknown error',
                   status: 'error'
                 })
-                throw new Error(data.content || 'Unknown error')
+                // 不 throw，保留已接收的部分結果，錯誤會顯示在步驟中
+                if (!fullContent) {
+                  fullContent = `⚠️ ${data.content || '處理過程中發生錯誤'}`
+                }
+                break
               
               case 'done':
               case 'end':
