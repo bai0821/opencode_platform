@@ -184,50 +184,69 @@ class HybridRetriever:
         self._initialize()
     
     def _initialize(self):
-        """初始化 clients"""
+        """初始化 clients，依照 EMBEDDING_PROVIDER 環境變數決定 provider"""
         # 確保環境變數已載入
         load_env()
-        
+
+        preferred_provider = os.getenv("EMBEDDING_PROVIDER", "cohere").lower()
         cohere_key = os.getenv("COHERE_API_KEY")
         openai_key = os.getenv("OPENAI_API_KEY")
-        
-        # 優先使用 Cohere
-        if cohere_key:
-            try:
-                import cohere
-                self.cohere_client = cohere.Client(api_key=cohere_key)
-                self.embed_provider = "cohere"
-                self.embed_model = os.getenv("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
-                logger.info(f"✅ [HybridRetriever] 使用 Cohere embedding: {self.embed_model}")
-                
-                # 檢查是否有 rerank 模型
-                if self.use_rerank:
-                    logger.info(f"✅ [HybridRetriever] Rerank 已啟用 (rerank-multilingual-v3.0)")
-            except ImportError:
-                logger.warning("⚠️ [HybridRetriever] cohere 套件未安裝")
-            except Exception as e:
-                logger.error(f"❌ [HybridRetriever] Cohere 初始化失敗: {e}")
-        
-        # 備用：OpenAI
-        if not self.cohere_client and openai_key:
-            try:
-                from openai import OpenAI
-                self.openai_client = OpenAI(api_key=openai_key)
-                self.embed_provider = "openai"
-                self.embed_model = "text-embedding-3-small"
-                self.use_rerank = False  # OpenAI 沒有 rerank
-                logger.info(f"✅ [HybridRetriever] 使用 OpenAI embedding: {self.embed_model}")
-            except ImportError:
-                logger.warning("⚠️ [HybridRetriever] openai 套件未安裝")
-            except Exception as e:
-                logger.error(f"❌ [HybridRetriever] OpenAI 初始化失敗: {e}")
-        
+
+        logger.info(f"📦 [HybridRetriever] EMBEDDING_PROVIDER={preferred_provider}")
+
+        # 根據 EMBEDDING_PROVIDER 決定主要 provider
+        if preferred_provider == "cohere" and cohere_key:
+            self._try_init_cohere(cohere_key)
+            if not self.cohere_client and openai_key:
+                logger.warning("⚠️ [HybridRetriever] Cohere 初始化失敗，降級到 OpenAI")
+                self._try_init_openai(openai_key)
+        elif preferred_provider == "openai" and openai_key:
+            self._try_init_openai(openai_key)
+            if not self.openai_client and cohere_key:
+                logger.warning("⚠️ [HybridRetriever] OpenAI 初始化失敗，降級到 Cohere")
+                self._try_init_cohere(cohere_key)
+        else:
+            # 按 key 可用性選擇
+            if cohere_key:
+                self._try_init_cohere(cohere_key)
+            if not self.cohere_client and openai_key:
+                self._try_init_openai(openai_key)
+
         if not self.cohere_client and not self.openai_client:
             logger.error("❌ [HybridRetriever] 沒有可用的 embedding provider！")
             raise ValueError("需要設定 COHERE_API_KEY 或 OPENAI_API_KEY")
-        
+
         # 初始化 Qdrant
         self._init_qdrant()
+
+    def _try_init_cohere(self, api_key: str):
+        """嘗試初始化 Cohere client"""
+        try:
+            import cohere
+            self.cohere_client = cohere.Client(api_key=api_key)
+            self.embed_provider = "cohere"
+            self.embed_model = os.getenv("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
+            logger.info(f"✅ [HybridRetriever] 使用 Cohere embedding: {self.embed_model}")
+            if self.use_rerank:
+                logger.info(f"✅ [HybridRetriever] Rerank 已啟用 (rerank-multilingual-v3.0)")
+        except ImportError:
+            logger.warning("⚠️ [HybridRetriever] cohere 套件未安裝，請執行: pip install cohere")
+        except Exception as e:
+            logger.error(f"❌ [HybridRetriever] Cohere 初始化失敗: {e}")
+
+    def _try_init_openai(self, api_key: str):
+        """嘗試初始化 OpenAI client"""
+        try:
+            from openai import OpenAI
+            self.openai_client = OpenAI(api_key=api_key)
+            self.embed_provider = "openai"
+            self.embed_model = "text-embedding-3-small"
+            self.use_rerank = False  # OpenAI 沒有 rerank
+            logger.info(f"✅ [HybridRetriever] 使用 OpenAI embedding: {self.embed_model}")
+        except ImportError:
+            logger.warning("⚠️ [HybridRetriever] openai 套件未安裝")
+        except Exception as e:
+            logger.error(f"❌ [HybridRetriever] OpenAI 初始化失敗: {e}")
     
     def _init_qdrant(self):
         """初始化 Qdrant client"""

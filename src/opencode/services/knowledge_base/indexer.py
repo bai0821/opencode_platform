@@ -65,53 +65,86 @@ class Indexer:
         self._initialize()
     
     def _initialize(self):
-        """初始化 clients 和設定"""
+        """初始化 clients 和設定，依照 EMBEDDING_PROVIDER 環境變數決定 provider"""
         # 確保環境變數已載入
         load_env()
-        
+
+        preferred_provider = os.getenv("EMBEDDING_PROVIDER", "cohere").lower()
         cohere_key = os.getenv("COHERE_API_KEY")
         openai_key = os.getenv("OPENAI_API_KEY")
-        
-        # 優先使用 Cohere
-        if cohere_key:
-            try:
-                import cohere
-                self.cohere_client = cohere.Client(api_key=cohere_key)
-                self.embed_provider = "cohere"
-                self.embed_model = os.getenv("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
-                self.embed_dim = 1024  # Cohere v3 模型固定 1024 維
-                logger.info(f"✅ [Indexer] 使用 Cohere embedding: {self.embed_model}")
-            except ImportError:
-                logger.warning("⚠️ [Indexer] cohere 套件未安裝")
-            except Exception as e:
-                logger.error(f"❌ [Indexer] Cohere 初始化失敗: {e}")
-        
-        # OpenAI 作為備用或主要
-        if openai_key:
-            try:
-                from openai import OpenAI
-                self.openai_client = OpenAI(api_key=openai_key)
-                
-                if not self.cohere_client:
-                    # 沒有 Cohere，使用 OpenAI 作為主要
-                    self.embed_provider = "openai"
-                    self.embed_model = "text-embedding-3-small"
-                    self.embed_dim = 1536
-                    logger.info(f"✅ [Indexer] 使用 OpenAI embedding: {self.embed_model}")
-                else:
-                    # 有 Cohere，OpenAI 作為備用
-                    self._has_openai_fallback = True
-                    logger.info(f"✅ [Indexer] OpenAI 作為備用 embedding provider")
-                    
-            except ImportError:
-                logger.warning("⚠️ [Indexer] openai 套件未安裝")
-            except Exception as e:
-                logger.error(f"❌ [Indexer] OpenAI 初始化失敗: {e}")
-        
+
+        logger.info(f"📦 [Indexer] EMBEDDING_PROVIDER={preferred_provider}")
+
+        # 根據 EMBEDDING_PROVIDER 決定主要 provider
+        if preferred_provider == "cohere" and cohere_key:
+            self._try_init_cohere(cohere_key)
+            if not self.cohere_client:
+                logger.warning("⚠️ [Indexer] Cohere 初始化失敗，嘗試降級到 OpenAI")
+                self._try_init_openai_as_primary(openai_key)
+            elif openai_key:
+                self._try_init_openai_as_fallback(openai_key)
+        elif preferred_provider == "openai" and openai_key:
+            self._try_init_openai_as_primary(openai_key)
+            if not self.openai_client and cohere_key:
+                logger.warning("⚠️ [Indexer] OpenAI 初始化失敗，嘗試降級到 Cohere")
+                self._try_init_cohere(cohere_key)
+        else:
+            # EMBEDDING_PROVIDER 未指定或對應 key 不存在，按 key 可用性選擇
+            if cohere_key:
+                self._try_init_cohere(cohere_key)
+            if not self.cohere_client and openai_key:
+                self._try_init_openai_as_primary(openai_key)
+            elif self.cohere_client and openai_key:
+                self._try_init_openai_as_fallback(openai_key)
+
         if not self.cohere_client and not self.openai_client:
             logger.error("❌ [Indexer] 沒有可用的 embedding provider！")
             logger.error("   請設定 COHERE_API_KEY 或 OPENAI_API_KEY")
             raise ValueError("需要設定 COHERE_API_KEY 或 OPENAI_API_KEY")
+
+    def _try_init_cohere(self, api_key: str):
+        """嘗試初始化 Cohere client"""
+        try:
+            import cohere
+            self.cohere_client = cohere.Client(api_key=api_key)
+            self.embed_provider = "cohere"
+            self.embed_model = os.getenv("COHERE_EMBED_MODEL", "embed-multilingual-v3.0")
+            self.embed_dim = 1024
+            logger.info(f"✅ [Indexer] 使用 Cohere embedding: {self.embed_model}")
+        except ImportError:
+            logger.warning("⚠️ [Indexer] cohere 套件未安裝，請執行: pip install cohere")
+        except Exception as e:
+            logger.error(f"❌ [Indexer] Cohere 初始化失敗: {e}")
+
+    def _try_init_openai_as_primary(self, api_key: str):
+        """嘗試初始化 OpenAI 作為主要 provider"""
+        if not api_key:
+            return
+        try:
+            from openai import OpenAI
+            self.openai_client = OpenAI(api_key=api_key)
+            self.embed_provider = "openai"
+            self.embed_model = "text-embedding-3-small"
+            self.embed_dim = 1536
+            logger.info(f"✅ [Indexer] 使用 OpenAI embedding: {self.embed_model}")
+        except ImportError:
+            logger.warning("⚠️ [Indexer] openai 套件未安裝")
+        except Exception as e:
+            logger.error(f"❌ [Indexer] OpenAI 初始化失敗: {e}")
+
+    def _try_init_openai_as_fallback(self, api_key: str):
+        """嘗試初始化 OpenAI 作為備用 provider"""
+        if not api_key:
+            return
+        try:
+            from openai import OpenAI
+            self.openai_client = OpenAI(api_key=api_key)
+            self._has_openai_fallback = True
+            logger.info(f"✅ [Indexer] OpenAI 作為備用 embedding provider")
+        except ImportError:
+            logger.warning("⚠️ [Indexer] openai 套件未安裝")
+        except Exception as e:
+            logger.error(f"❌ [Indexer] OpenAI 備用初始化失敗: {e}")
         
         # 初始化 Qdrant
         self._init_qdrant()
