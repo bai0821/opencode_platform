@@ -499,7 +499,23 @@ class AgentCoordinator:
             total_usage["estimated_cost_usd"] += summary_usage.get("estimated_cost_usd", 0)
         
         logger.info(f"[{execution_id}] 📊 Total token usage: {total_usage}")
-        
+
+        # 記錄成本到 CostTrackingService
+        try:
+            from opencode.control_plane.cost import get_cost_service, CostType
+            cost_service = get_cost_service()
+            if total_usage.get("total_tokens", 0) > 0:
+                cost_service.record_usage(
+                    model="gpt-4o",
+                    cost_type=CostType.LLM_INPUT,
+                    input_tokens=total_usage.get("prompt_tokens", 0),
+                    output_tokens=total_usage.get("completion_tokens", 0),
+                    action="agent_chat"
+                )
+                logger.info(f"[{execution_id}] 💰 成本已記錄: ${total_usage.get('estimated_cost_usd', 0):.6f}")
+        except Exception as cost_err:
+            logger.warning(f"[{execution_id}] ⚠️ 成本記錄失敗: {cost_err}")
+
         yield {
             "type": "final",
             "content": final_result,
