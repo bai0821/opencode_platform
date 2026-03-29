@@ -653,7 +653,8 @@ class OrchestratorActor(SupervisorActor):
                 try:
                     import base64
                     content = base64.b64decode(data).decode("utf-8")[:10000]  # 限制長度
-                except:
+                except Exception as e:
+                    logger.warning(f"⚠️ 解碼檔案內容失敗: {e}")
                     content = "[無法解碼檔案內容]"
             elif mime_type == "application/pdf" or name.endswith(".pdf"):
                 content = "[PDF 檔案 - 請先上傳到知識庫進行索引]"

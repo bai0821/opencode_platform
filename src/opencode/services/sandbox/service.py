@@ -309,7 +309,8 @@ class SandboxService(MCPServiceProtocol):
             try:
                 self.docker_client.ping()
                 return True
-            except:
+            except Exception as e:
+                logger.warning(f"⚠️ [Sandbox] Docker 健康檢查失敗: {e}")
                 return False
         
         return True
@@ -491,8 +492,8 @@ class SandboxService(MCPServiceProtocol):
             if container:
                 try:
                     container.remove(force=True)
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"⚠️ [Sandbox] 清理容器失敗: {e}")
     
     async def _execute_python_local(
         self,

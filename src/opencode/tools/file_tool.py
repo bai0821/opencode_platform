@@ -72,8 +72,8 @@ class FileReadTool(BaseTool):
             if full_path.suffix == ".json":
                 try:
                     content = json.loads(content)
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"⚠️ JSON 解析失敗，返回原始內容: {e}")
             
             return {
                 "success": True,

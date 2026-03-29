@@ -179,7 +179,8 @@ class KnowledgeBaseService(MCPServiceProtocol, LongTermMemoryProtocol):
             if self.retriever and self.retriever.qdrant_client:
                 self.retriever.qdrant_client.get_collections()
             return True
-        except:
+        except Exception as e:
+            logger.warning(f"⚠️ [Service] 健康檢查失敗: {e}")
             return False
     
     async def shutdown(self) -> None:

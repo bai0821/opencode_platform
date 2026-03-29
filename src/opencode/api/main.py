@@ -810,8 +810,8 @@ async def reset_qdrant():
         try:
             client.delete_collection("rag_knowledge_base")
             logger.info("🗑️ 已刪除舊 collection")
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"⚠️ 刪除舊 collection 失敗（可能不存在）: {e}")
         
         # 創建新 collection
         client.create_collection(

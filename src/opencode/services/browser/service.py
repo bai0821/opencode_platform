@@ -189,9 +189,9 @@ class BrowserService:
                 try:
                     screenshot_bytes = await page.screenshot(type="jpeg", quality=60)
                     screenshot_b64 = base64.b64encode(screenshot_bytes).decode()
-                except:
-                    pass
-            
+                except Exception as e:
+                    logger.warning(f"⚠️ 截圖失敗: {e}")
+
             # 提取內容
             content = await page.evaluate("""
                 () => {
@@ -947,9 +947,10 @@ class DeepResearchAgent:
                     "suggestion": result.get("suggestion", ""),
                     "score": result.get("relevance_score", 50)
                 }
-            except:
+            except Exception as e:
+                logger.warning(f"⚠️ 解析相關性判斷結果失敗: {e}")
                 return {"is_relevant": True, "message": "文件已添加"}
-                
+
         except Exception as e:
             logger.error(f"檢查相關性失敗: {e}")
             return {"is_relevant": True, "message": "文件已添加"}

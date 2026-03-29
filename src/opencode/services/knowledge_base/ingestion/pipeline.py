@@ -277,8 +277,8 @@ class Indexer:
         
         try:
             self.qdrant_client.get_collection(self.collection_name)
-        except:
-            logger.info(f"🔧 Creating collection: {self.collection_name}")
+        except Exception as e:
+            logger.info(f"🔧 Collection 不存在，正在建立: {self.collection_name} (原因: {e})")
             self.qdrant_client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(

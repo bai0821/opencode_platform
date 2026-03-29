@@ -417,8 +417,8 @@ class MultimodalParser:
                 try:
                     desc = df.describe().to_string()
                     sheet_text += f"\n\n統計摘要:\n{desc}"
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"⚠️ [Parser] 生成統計摘要失敗: {e}")
                 
                 chunks = self._split_text(sheet_text)
                 for chunk_idx, chunk in enumerate(chunks):
@@ -457,7 +457,8 @@ class MultimodalParser:
                 try:
                     df = pd.read_csv(file_path, encoding=encoding)
                     break
-                except:
+                except Exception as e:
+                    logger.warning(f"⚠️ [Parser] 以 {encoding} 編碼讀取 CSV 失敗: {e}")
                     continue
             else:
                 logger.error(f"❌ [Parser] 無法讀取 CSV 文件")
@@ -504,7 +505,8 @@ class MultimodalParser:
                     with open(file_path, 'r', encoding=encoding) as f:
                         content = f.read()
                     break
-                except:
+                except Exception as e:
+                    logger.warning(f"⚠️ [Parser] 以 {encoding} 編碼讀取文字文件失敗: {e}")
                     continue
             
             if not content:

@@ -300,9 +300,9 @@ WORKDIR /app
                     if result_file.exists():
                         try:
                             return_value = json.loads(result_file.read_text())
-                        except:
-                            pass
-                
+                        except Exception as e:
+                            logger.warning(f"⚠️ 解析 Docker 執行結果檔案失敗: {e}")
+
                 return ExecutionResult(
                     success=process.returncode == 0,
                     stdout=stdout_str,
@@ -311,7 +311,7 @@ WORKDIR /app
                     execution_time=execution_time,
                     error=None if process.returncode == 0 else f"Exit code: {process.returncode}"
                 )
-                
+
             except asyncio.TimeoutError:
                 # 強制停止容器
                 subprocess.run(
@@ -325,7 +325,7 @@ WORKDIR /app
                     execution_time=config.timeout,
                     error=f"Execution timeout ({config.timeout}s)"
                 )
-                
+
         except Exception as e:
             return ExecutionResult(
                 success=False,
@@ -334,7 +334,7 @@ WORKDIR /app
                 execution_time=time.time() - start_time,
                 error=str(e)
             )
-    
+
     async def _execute_local(
         self,
         code: str,
@@ -346,7 +346,7 @@ WORKDIR /app
         """本地模式執行（subprocess）"""
         import time
         start_time = time.time()
-        
+
         try:
             if language == Language.PYTHON:
                 code_file = exec_dir / "main.py"
@@ -361,33 +361,33 @@ WORKDIR /app
                 code_file = exec_dir / "main.sh"
                 code_file.write_text(code, encoding='utf-8')
                 cmd = ["sh", str(code_file)]
-            
+
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(exec_dir)
             )
-            
+
             try:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(),
                     timeout=config.timeout
                 )
-                
+
                 execution_time = time.time() - start_time
-                
+
                 stdout_str = stdout.decode('utf-8', errors='replace')[:config.max_output_size]
                 stderr_str = stderr.decode('utf-8', errors='replace')[:config.max_output_size]
-                
+
                 # 嘗試解析返回值
                 return_value = None
                 result_file = exec_dir / "_result.json"
                 if result_file.exists():
                     try:
                         return_value = json.loads(result_file.read_text())
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"⚠️ 解析本地執行結果檔案失敗: {e}")
                 
                 return ExecutionResult(
                     success=process.returncode == 0,
