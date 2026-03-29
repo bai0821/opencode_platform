@@ -60,18 +60,20 @@ class ResearcherAgent(BaseAgent):
 **web_fetch** - 擷取特定網頁的內容
 **file_read** - 讀取文件內容
 
+## 強制規則（必須遵守）
+
+1. **當使用者選擇了文件（context 中有 selected_docs 或 file_filter）時，你必須先呼叫 rag_search 或 rag_multi_search 工具搜尋文件內容。禁止跳過工具直接回答。你的回答必須基於搜尋結果。**
+2. 如果任務明確要求「網路上」「線上」「最新」的資訊，使用 web_search。
+3. 即使沒有選中文件，只要問題可能涉及知識庫內容，也應該先搜尋再回答。
+4. **禁止**只憑你自己的知識回答，必須先使用工具搜集資料。
+
 工作流程：
 1. 分析任務需求
 2. 判斷是搜尋本地文件(rag_search)還是搜尋網路(web_search)
-3. 如果有指定文件（在 file_filter 或 selected_docs），優先搜尋該文件
+3. 如果有指定文件，在 rag_search 中設置 file_filter 參數
 4. 執行搜尋
-5. 整理和分析結果
+5. 根據搜尋結果整理和分析
 6. 輸出結構化的研究發現，包含來源引用
-
-重要：
-- 如果任務明確要求「網路上」「線上」「最新」的資訊，使用 web_search
-- 如果上下文中有 selected_docs 且沒有要求網路搜尋，使用 rag_search
-- 請主動使用工具來搜集資料，不要只憑記憶回答
 """
     
     async def process_task(self, task: AgentTask) -> AgentResult:
@@ -126,7 +128,42 @@ class ResearcherAgent(BaseAgent):
         result = await self.think(prompt, use_tools=True)
         tool_calls = result.get("tool_calls", [])
         usage = result.get("usage", {})
-        
+
+        # 如果有選中文件但 LLM 沒有呼叫任何搜尋工具，主動呼叫 rag_search
+        has_search_call = any(
+            tc.get("tool") in ("rag_search", "rag_multi_search", "web_search")
+            for tc in tool_calls
+        )
+        if not has_search_call and not use_web_search:
+            logger.warning("⚠️ [ResearcherAgent] LLM 未呼叫搜尋工具，主動呼叫 rag_search")
+            query = search_query or description
+            tool_args = {"query": query, "top_k": 5}
+            if selected_docs:
+                tool_args["file_filter"] = ",".join(selected_docs)
+
+            fallback_result = await self.call_tool("rag_search", **tool_args)
+            tool_calls.append({
+                "tool": "rag_search",
+                "arguments": tool_args,
+                "result": fallback_result
+            })
+
+            # 用搜尋結果讓 LLM 重新生成回答
+            if fallback_result.get("results"):
+                context_text = "\n\n".join([
+                    f"[來源: {r.get('file_name', '未知')}, 第{r.get('page', '?')}頁]\n{r.get('text', '')}"
+                    for r in fallback_result["results"]
+                ])
+                follow_up = await self.think(
+                    f"根據以下搜尋結果回答問題：{description}\n\n搜尋結果：\n{context_text}",
+                    use_tools=False
+                )
+                result["answer"] = follow_up.get("answer", result.get("answer", ""))
+                # 累加 token 使用量
+                follow_usage = follow_up.get("usage", {})
+                for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                    usage[key] = usage.get(key, 0) + follow_usage.get(key, 0)
+
         # 提取來源資訊
         sources = []
         for tc in tool_calls:
