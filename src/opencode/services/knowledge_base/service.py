@@ -235,9 +235,43 @@ class KnowledgeBaseService(MCPServiceProtocol, LongTermMemoryProtocol):
         ]
     
     async def delete(self, doc_id: str) -> bool:
-        """刪除內容"""
-        # TODO: 實現按 doc_id 刪除
-        return True
+        """刪除內容 - 按 doc_id 刪除 Qdrant 向量資料並同步清除 BM25 索引"""
+        if not self.indexer or not self.indexer.qdrant_client:
+            logger.warning(f"⚠️ [Service] 無法刪除 doc_id={doc_id}：Indexer 未初始化")
+            return False
+
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+            # 從 Qdrant 刪除符合 doc_id 的向量
+            self.indexer.qdrant_client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
+                )
+            )
+            logger.info(f"🗑️ [Service] 已從 Qdrant 刪除 doc_id={doc_id}")
+
+            # 同步清除 BM25 索引中的對應記錄
+            if self.retriever and hasattr(self.retriever, 'bm25_index'):
+                bm25 = self.retriever.bm25_index
+                if bm25._initialized and bm25.documents:
+                    remaining = [
+                        (did, text, meta) for did, text, meta in bm25.documents
+                        if meta.get("doc_id") != doc_id
+                    ]
+                    if len(remaining) != len(bm25.documents):
+                        bm25.build_index(remaining)
+                        logger.info(f"🗑️ [Service] 已從 BM25 索引清除 doc_id={doc_id}")
+
+                # 清除 BM25 快取，強制下次搜尋時重建索引
+                self.retriever._bm25_docs_cache.clear()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ [Service] 刪除 doc_id={doc_id} 失敗: {e}")
+            return False
     
     # ========== 內部方法 ==========
     
