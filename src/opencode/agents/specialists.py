@@ -361,45 +361,35 @@ df = pd.read_excel("{file_paths[0]}")
         logger.info(f"🔧 [CoderAgent] 提取到代碼: {len(code)} 字符")
         
         execution_result = None
-        
-        # 如果提取到代碼，執行它
+
+        # 如果提取到代碼，透過 self.call_tool() 走正規工具呼叫路徑
         if code:
             logger.info(f"🔧 [CoderAgent] 準備執行代碼:\n{code[:300]}...")
-            
+
             try:
-                from opencode.tools import get_tool_registry
-                registry = get_tool_registry()
-                code_tool = registry.get("code_execute")  # 正確的方法名
-                
-                logger.info(f"🔧 [CoderAgent] code_execute 工具: {code_tool}")
-                
-                if code_tool:
-                    logger.info(f"🔧 [CoderAgent] 調用 code_execute 工具...")
-                    execution_result = await code_tool.execute(
-                        code=code,
-                        language=language,
-                        timeout=60
-                    )
-                    
-                    logger.info(f"🔧 [CoderAgent] 執行結果: {json.dumps(execution_result, ensure_ascii=False, default=str)[:500]}")
-                    
-                    tool_calls.append({
-                        "tool": "code_execute",
-                        "arguments": {"code": code, "language": language},
-                        "result": execution_result
-                    })
-                    
-                    logger.info(f"🔧 [CoderAgent] 執行結果: success={execution_result.get('success')}")
-                    if execution_result.get('figures'):
-                        logger.info(f"🔧 [CoderAgent] 生成 {len(execution_result['figures'])} 張圖表")
-                    if execution_result.get('stdout'):
-                        logger.info(f"🔧 [CoderAgent] stdout: {execution_result['stdout'][:200]}")
-                    if execution_result.get('error'):
-                        logger.error(f"🔧 [CoderAgent] error: {execution_result['error']}")
-                else:
-                    logger.warning("⚠️ [CoderAgent] code_execute 工具未找到")
-                    logger.info(f"⚠️ [CoderAgent] 可用工具: {registry.list_all()}")
-                    
+                execution_result = await self.call_tool(
+                    "code_execute",
+                    code=code,
+                    language=language,
+                    timeout=60
+                )
+
+                logger.info(f"🔧 [CoderAgent] 執行結果: {json.dumps(execution_result, ensure_ascii=False, default=str)[:500]}")
+
+                tool_calls.append({
+                    "tool": "code_execute",
+                    "arguments": {"code": code, "language": language},
+                    "result": execution_result
+                })
+
+                logger.info(f"🔧 [CoderAgent] 執行結果: success={execution_result.get('success')}")
+                if execution_result.get('figures'):
+                    logger.info(f"🔧 [CoderAgent] 生成 {len(execution_result['figures'])} 張圖表")
+                if execution_result.get('stdout'):
+                    logger.info(f"🔧 [CoderAgent] stdout: {execution_result['stdout'][:200]}")
+                if execution_result.get('error'):
+                    logger.error(f"🔧 [CoderAgent] error: {execution_result['error']}")
+
             except Exception as e:
                 logger.error(f"❌ [CoderAgent] 執行代碼異常: {e}")
                 import traceback
