@@ -153,19 +153,23 @@ class Indexer:
         """初始化 Qdrant client 和 collection"""
         try:
             from qdrant_client import QdrantClient
-            from qdrant_client.models import Distance, VectorParams
-            
             self.qdrant_client = QdrantClient(url=self.qdrant_url)
-            
-            # 檢查 collection 是否存在
+            self._ensure_collection()
+        except Exception as e:
+            logger.error(f"❌ [Indexer] Qdrant 初始化失敗: {e}")
+            raise
+
+    def _ensure_collection(self):
+        """確保 Qdrant collection 存在，不存在則自動建立"""
+        from qdrant_client.models import Distance, VectorParams
+
+        try:
             collections = self.qdrant_client.get_collections().collections
             collection_names = [c.name for c in collections]
-            
+
             if self.collection_name not in collection_names:
-                # 創建新 collection
                 logger.info(f"📦 [Indexer] 創建新 collection: {self.collection_name}")
                 logger.info(f"📦 [Indexer] 向量維度: {self.embed_dim}")
-                
                 self.qdrant_client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
@@ -175,20 +179,13 @@ class Indexer:
                 )
                 logger.info(f"✅ [Indexer] Collection 創建成功")
             else:
-                # 檢查維度是否匹配
                 collection_info = self.qdrant_client.get_collection(self.collection_name)
                 existing_dim = collection_info.config.params.vectors.size
-                
                 if existing_dim != self.embed_dim:
-                    logger.warning(f"⚠️ [Indexer] 維度不匹配！")
-                    logger.warning(f"   Collection 維度: {existing_dim}")
-                    logger.warning(f"   當前 provider 維度: {self.embed_dim}")
+                    logger.warning(f"⚠️ [Indexer] 維度不匹配！Collection: {existing_dim}, 當前 provider: {self.embed_dim}")
                     logger.warning(f"   請重置 collection 或切換 embedding provider")
-                else:
-                    logger.info(f"✅ [Indexer] Collection 已存在，維度匹配: {existing_dim}")
-                    
         except Exception as e:
-            logger.error(f"❌ [Indexer] Qdrant 初始化失敗: {e}")
+            logger.error(f"❌ [Indexer] 確認 collection 失敗: {e}")
             raise
     
     def get_embedding(self, text: str, input_type: str = "search_document") -> List[float]:
@@ -334,7 +331,10 @@ class Indexer:
         if not documents:
             logger.warning("⚠️ [Indexer] 沒有文件需要索引")
             return 0
-        
+
+        # 確保 collection 存在（防止外部刪除後寫入失敗）
+        self._ensure_collection()
+
         from qdrant_client.models import PointStruct
         
         logger.info(f"💾 [Indexer] ====== 開始索引 ======")
