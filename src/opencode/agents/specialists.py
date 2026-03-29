@@ -461,10 +461,10 @@ class AnalystAgent(BaseAgent):
         """執行分析任務"""
         start_time = time.time()
         tool_calls = []
-        
+
         description = task.description or ""
         context = task.context or {}
-        
+
         # 獲取選中的文件路徑
         selected_docs = context.get("selected_docs", [])
         file_path_hint = ""
@@ -475,7 +475,7 @@ class AnalystAgent(BaseAgent):
 重要：用戶選擇了以下文件，請使用完整路徑：
 {chr(10).join(f'- {fp}' for fp in file_paths)}
 """
-        
+
         prompt = f"""分析任務：{description}
 {file_path_hint}
 {"數據/上下文：" + json.dumps({k: v for k, v in context.items() if k != 'attachments'}, ensure_ascii=False) if context else ""}
@@ -489,15 +489,52 @@ class AnalystAgent(BaseAgent):
         result = await self.think(prompt, use_tools=True)
         tool_calls = result.get("tool_calls", [])
         usage = result.get("usage", {})
-        
+
+        answer = result.get("answer", "")
+        execution_result = None
+
+        # 如果 LLM 回應中包含程式碼但未透過 function calling 執行，
+        # 主動提取並透過 code_execute 工具執行
+        has_code_tool_call = any(
+            tc.get("tool") == "code_execute" for tc in tool_calls
+        )
+
+        if not has_code_tool_call and "```python" in answer:
+            code = answer.split("```python")[1].split("```")[0].strip()
+            if code:
+                logger.info(f"📊 [AnalystAgent] LLM 產生程式碼但未主動呼叫工具，主動執行...")
+                try:
+                    execution_result = await self.call_tool(
+                        "code_execute",
+                        code=code,
+                        language="python",
+                        timeout=60
+                    )
+                    tool_calls.append({
+                        "tool": "code_execute",
+                        "arguments": {"code": code, "language": "python"},
+                        "result": execution_result
+                    })
+                    logger.info(f"📊 [AnalystAgent] 程式碼執行結果: success={execution_result.get('success')}")
+                except Exception as e:
+                    logger.error(f"❌ [AnalystAgent] 程式碼執行失敗: {e}")
+                    execution_result = {"success": False, "error": str(e)}
+
+        output = {
+            "analysis": answer,
+            "insights": []
+        }
+
+        if execution_result:
+            output["execution_result"] = execution_result
+            output["stdout"] = execution_result.get("stdout", "")
+            output["figures"] = execution_result.get("figures", [])
+
         return AgentResult(
             task_id=task.id,
             agent_type=self.type.value,
             success=True,
-            output={
-                "analysis": result.get("answer", ""),
-                "insights": []
-            },
+            output=output,
             tool_calls=tool_calls,
             thinking="數據分析",
             execution_time=time.time() - start_time,
