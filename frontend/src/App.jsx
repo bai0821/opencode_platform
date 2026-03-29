@@ -17,7 +17,6 @@ import {
   Layers,
   Bot,
   Puzzle,
-  Terminal,
   Store,
   GitBranch
 } from 'lucide-react'
@@ -33,7 +32,6 @@ import MCPPage from './components/MCPPage'
 import CollectionsPage from './components/CollectionsPage'
 import AgentsPage from './components/AgentsPage'
 import PluginManager from './components/PluginManager'
-import CodePlayground from './components/CodePlayground'
 import PluginMarketplace from './components/PluginMarketplace'
 import WorkflowEditor from './components/WorkflowEditor'
 import clsx from 'clsx'
@@ -53,7 +51,6 @@ const getNavItems = (role) => {
     items.push(
       { id: 'agents', label: 'Agents', icon: Bot },
       { id: 'workflows', label: '工作流', icon: GitBranch },
-      { id: 'sandbox', label: '沙箱', icon: Terminal },
       { id: 'admin', label: '系統', icon: Database },
       { id: 'collections', label: '知識庫', icon: Layers },
       { id: 'mcp', label: 'MCP', icon: Plug },
@@ -301,10 +298,6 @@ function App() {
       case 'plugins':
         return (
           <PluginManager apiBase={API_BASE} token={token} />
-        )
-      case 'sandbox':
-        return (
-          <CodePlayground apiBase={API_BASE} token={token} />
         )
       case 'marketplace':
         return (
