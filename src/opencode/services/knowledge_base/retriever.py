@@ -46,26 +46,22 @@ class BM25Index:
         self._initialized = False
     
     def _tokenize(self, text: str) -> List[str]:
-        """簡單分詞 (支援中英文)"""
+        """分詞 (支援中英文) - 使用 jieba 中文分詞"""
         import re
-        
-        # 英文：按空格和標點分詞，轉小寫
-        # 中文：按字符分詞
+        import jieba
+
         tokens = []
-        
+
         # 先提取英文單詞
         words = re.findall(r'[a-zA-Z0-9]+', text.lower())
         tokens.extend(words)
-        
-        # 提取中文字符
+
+        # 提取中文字符並使用 jieba 分詞
         chinese = re.findall(r'[\u4e00-\u9fff]+', text)
-        for word in chinese:
-            # 中文按 2-gram 分詞
-            for i in range(len(word) - 1):
-                tokens.append(word[i:i+2])
-            if len(word) == 1:
-                tokens.append(word)
-        
+        for segment in chinese:
+            cut_words = jieba.lcut(segment)
+            tokens.extend(cut_words)
+
         return tokens
     
     def build_index(self, documents: List[Tuple[str, str, Dict]]):

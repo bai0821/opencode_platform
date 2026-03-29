@@ -35,6 +35,9 @@ dependencies = [
     # AI/LLM
     "openai>=1.0.0",
     
+    # NLP
+    "jieba>=0.42.1",
+
     # Vector DB
     "qdrant-client>=1.7.0",
     
