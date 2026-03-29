@@ -251,33 +251,61 @@ class AuditService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> Dict[str, Any]:
-        """獲取統計資訊"""
+        """獲取統計資訊（成本從 CostTrackingService 讀取）"""
         logs = self.query(start_date=start_date, end_date=end_date, limit=10000)
-        
+
         stats = {
             "total_count": len(logs),
             "success_count": sum(1 for l in logs if l.get('success')),
             "error_count": sum(1 for l in logs if not l.get('success')),
             "total_tokens": sum(l.get('tokens_used', 0) for l in logs),
-            "total_cost": sum(l.get('api_cost', 0) for l in logs),
+            "total_cost": 0.0,
             "by_action": {},
             "by_user": {},
             "by_level": {}
         }
-        
+
+        # 從 CostTrackingService 讀取真實成本（審計條目本身不含成本資料）
+        try:
+            from opencode.control_plane.cost import get_cost_service
+            cost_service = get_cost_service()
+
+            if start_date and end_date:
+                current = start_date.date() if hasattr(start_date, 'date') else start_date
+                end = end_date.date() if hasattr(end_date, 'date') else end_date
+                total_cost = 0.0
+                while current <= end:
+                    daily = cost_service.get_daily_usage(current)
+                    total_cost += daily.get("total_cost", 0)
+                    current += timedelta(days=1)
+                stats["total_cost"] = round(total_cost, 4)
+                stats["total_tokens"] = max(stats["total_tokens"], 0)
+            else:
+                # 預設取最近 7 天
+                from datetime import date as date_type
+                today = date_type.today()
+                total_cost = 0.0
+                for i in range(7):
+                    d = today - timedelta(days=i)
+                    daily = cost_service.get_daily_usage(d)
+                    total_cost += daily.get("total_cost", 0)
+                stats["total_cost"] = round(total_cost, 4)
+        except Exception as e:
+            logger.warning(f"⚠️ 從 CostTrackingService 讀取成本失敗: {e}")
+
         for log in logs:
             # 按動作統計
             action = log.get('action', 'unknown')
             stats["by_action"][action] = stats["by_action"].get(action, 0) + 1
-            
+
             # 按用戶統計
             username = log.get('username', 'anonymous')
             stats["by_user"][username] = stats["by_user"].get(username, 0) + 1
-            
+
             # 按級別統計
             level = log.get('level', 'info')
             stats["by_level"][level] = stats["by_level"].get(level, 0) + 1
-        
+
         return stats
     
     def cleanup_old_logs(self) -> int:
